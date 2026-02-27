@@ -1,0 +1,115 @@
+# ──────────────────────────────────────────────────────────────
+#  .gitlab-ci.yml — Azure Migration Architect Agent Pipeline
+# ──────────────────────────────────────────────────────────────
+# This pipeline triggers when .tf or Dockerfile changes are
+# pushed, runs the Duo AI prompt, and opens a Merge Request
+# with generated Azure Bicep templates + cost estimate.
+# ──────────────────────────────────────────────────────────────
+
+stages:
+  - detect
+  - generate
+  - publish
+
+variables:
+  MIGRATION_BRANCH: "migrate-to-azure"
+  PYTHON_IMAGE: "python:3.12-slim"
+
+# ── Only run when infra files change ──────────────────────────
+.infra_changes:
+  rules:
+    - changes:
+        - "**/*.tf"
+        - "**/Dockerfile"
+        - "**/Dockerfile.*"
+      when: always
+    - when: never
+
+# ── Stage 1: Detect changed infrastructure files ─────────────
+detect_infra:
+  stage: detect
+  image: alpine:3.19
+  extends: .infra_changes
+  script:
+    - echo "Detecting infrastructure file changes…"
+    - |
+      git diff --name-only $CI_COMMIT_BEFORE_SHA $CI_COMMIT_SHA \
+        | grep -E '\.(tf)$|Dockerfile' \
+        | tee /tmp/changed_infra_files.txt
+    - echo "CHANGED_FILES=$(cat /tmp/changed_infra_files.txt | tr '\n' ',')" >> detect.env
+  artifacts:
+    reports:
+      dotenv: detect.env
+
+# ── Stage 2: Run GitLab Duo Agent prompt & generate Bicep ────
+generate_bicep:
+  stage: generate
+  image: $PYTHON_IMAGE
+  extends: .infra_changes
+  needs: ["detect_infra"]
+  script:
+    - echo "Changed files ➜ $CHANGED_FILES"
+    #
+    # Invoke the GitLab Duo Chat API with the Azure Migration
+    # Architect prompt template.  The script reads each changed
+    # file, builds the prompt, calls Duo, and writes:
+    #   generated/main.bicep           — the Azure Bicep template
+    #   generated/migration_summary.md — tables for the MR body
+    #   generated/duo_response_raw.md  — full AI response (debug)
+    #
+    - python scripts/invoke_duo_agent.py --files "$CHANGED_FILES" --outdir generated/
+    - echo "Generated files:" && ls -la generated/
+  artifacts:
+    paths:
+      - generated/
+
+# ── Stage 3: Create branch + commit + open Merge Request ─────
+publish_mr:
+  stage: publish
+  image: $PYTHON_IMAGE
+  extends: .infra_changes
+  needs: ["generate_bicep"]
+  script:
+    - echo "Publishing migration Merge Request…"
+    #
+    # 1. Create branch
+    #
+    - python scripts/open_migration_mr.py --action create-branch
+    #
+    # 2. Commit generated Bicep file(s)
+    #
+    - |
+      for bicep in generated/*.bicep; do
+        python scripts/open_migration_mr.py \
+          --action commit \
+          --file "infra/$(basename $bicep)" \
+          --content "$(cat $bicep)"
+      done
+    #
+    # 3. Open the Merge Request (use AI-generated summary if available)
+    #
+    - |
+      if [ -f generated/migration_summary.md ]; then
+        MR_BODY=$(cat generated/migration_summary.md)
+      else
+        MR_BODY="## Azure Migration Architect — Automated MR
+
+      This MR was created automatically by the GitLab Duo
+      **Azure Migration Architect** agent.
+
+      ### What changed
+      - Detected infrastructure files: ${CHANGED_FILES}
+      - Generated Azure Bicep templates in \`infra/\`"
+      fi
+
+      python scripts/open_migration_mr.py \
+        --action open-mr \
+        --title "🏗️ Azure Migration: auto-generated Bicep templates" \
+        --description "${MR_BODY}
+
+      ---
+      ### Next steps
+      1. Review the generated \`.bicep\` files
+      2. Verify the cost estimate table
+      3. Run \`az deployment group create\` to validate
+      4. Merge when ready 🚀"

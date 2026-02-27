@@ -1,0 +1,61 @@
+# GitLab Duo Agent Platform — Azure Migration Architect
+# https://docs.gitlab.com/ee/user/duo_workflow/
+
+name: azure-migration-architect
+description: >
+  Automatically converts Terraform and Dockerfile infrastructure code
+  into Azure-native Bicep templates via GitLab Duo, then opens a
+  Merge Request with the generated code and a cost estimate.
+
+version: "1.0.0"
+
+# ── Trigger ────────────────────────────────────────────────────────
+# The agent activates on push events that include .tf or Dockerfile changes.
+trigger:
+  event: push
+  branch_filter: "**"                    # any branch
+  file_patterns:
+    - "**/*.tf"
+    - "**/Dockerfile"
+    - "**/Dockerfile.*"
+
+# ── Prompt ─────────────────────────────────────────────────────────
+prompt:
+  template_file: prompts/azure_migration_architect.md
+  variables:
+    original_code: "{{changed_file_content}}"
+    project_context: "{{project_metadata}}"
+
+# ── Actions ────────────────────────────────────────────────────────
+# After the AI generates output, the agent executes these steps
+# using the GitLab API via the automation script.
+actions:
+  - name: create-branch
+    description: Create a new branch for the migration
+    script: scripts/open_migration_mr.py
+    args:
+      - "--action"
+      - "create-branch"
+
+  - name: commit-bicep
+    description: Commit generated .bicep files to the new branch
+    script: scripts/open_migration_mr.py
+    args:
+      - "--action"
+      - "commit"
+
+  - name: open-merge-request
+    description: Open an MR with migration summary and cost estimate
+    script: scripts/open_migration_mr.py
+    args:
+      - "--action"
+      - "open-mr"
+
+# ── Environment Variables (stored in GitLab CI/CD Variables) ──────
+env:
+  GITLAB_TOKEN: "${GITLAB_API_TOKEN}"        # Project or Group access token
+  GITLAB_PROJECT_ID: "${CI_PROJECT_ID}"
+  AZURE_SUBSCRIPTION_ID: "${AZURE_SUBSCRIPTION_ID}"
+  AZURE_TENANT_ID: "${AZURE_TENANT_ID}"
+  AZURE_CLIENT_ID: "${AZURE_CLIENT_ID}"      # Service Principal
+  AZURE_CLIENT_SECRET: "${AZURE_CLIENT_SECRET}"
