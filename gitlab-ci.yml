@@ -1,5 +1,5 @@
 # ──────────────────────────────────────────────────────────────
-#  .gitlab-ci.yml — Azure Migration Architect Agent Pipeline
+#  .gitlab-ci.yml — PushToBicep Architect Agent Pipeline
 # ──────────────────────────────────────────────────────────────
 # This pipeline triggers when .tf or Dockerfile changes are
 # pushed, runs the Duo AI prompt, and opens a Merge Request
@@ -92,10 +92,10 @@ publish_mr:
       if [ -f generated/migration_summary.md ]; then
         MR_BODY=$(cat generated/migration_summary.md)
       else
-        MR_BODY="## Azure Migration Architect — Automated MR
+        MR_BODY="## PushToBicep Architect — Automated MR
 
       This MR was created automatically by the GitLab Duo
-      **Azure Migration Architect** agent.
+      **PushToBicep Architect** agent.
 
       ### What changed
       - Detected infrastructure files: ${CHANGED_FILES}

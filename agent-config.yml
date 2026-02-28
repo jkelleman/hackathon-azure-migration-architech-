@@ -1,7 +1,7 @@
-# GitLab Duo Agent Platform — Azure Migration Architect
+# GitLab Duo Agent Platform — PushToBicep Architect
 # https://docs.gitlab.com/ee/user/duo_workflow/
 
-name: azure-migration-architect
+name: pushtobicep-architect
 description: >
   Automatically converts Terraform and Dockerfile infrastructure code
   into Azure-native Bicep templates via GitLab Duo, then opens a

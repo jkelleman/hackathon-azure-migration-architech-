@@ -2,7 +2,7 @@
 """
 invoke_duo_agent.py
 ───────────────────
-Calls the GitLab Duo Chat / Agent API with the Azure Migration Architect
+Calls the GitLab Duo Chat / Agent API with the PushToBicep Architect
 prompt template, sending changed infrastructure files as input.
 
 Returns the AI-generated Bicep code + migration summary to stdout,
@@ -51,7 +51,7 @@ def _load_prompt_template() -> str:
         return PROMPT_TEMPLATE_PATH.read_text()
     # Fallback minimal prompt if file is missing
     return textwrap.dedent("""\
-        You are the Azure Migration Architect agent.
+        You are the PushToBicep Architect agent.
         Convert the following infrastructure code to Azure Bicep.
         Include a cost estimate table.
 

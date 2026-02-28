@@ -2,7 +2,7 @@
 """
 open_migration_mr.py
 ────────────────────
-Automates the GitLab side of the Azure Migration Architect agent:
+Automates the GitLab side of the PushToBicep Architect agent:
 
   1. create-branch  → Creates a `migrate-to-azure` branch from HEAD.
   2. commit         → Commits generated .bicep files to that branch.
@@ -104,7 +104,7 @@ def open_merge_request(title: str, description: str) -> None:
 # ── CLI ────────────────────────────────────────────────────────────────────
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="GitLab API automation for Azure Migration Architect agent"
+        description="GitLab API automation for PushToBicep Architect agent"
     )
     parser.add_argument(
         "--action",
@@ -139,9 +139,9 @@ def main() -> None:
     elif args.action == "open-mr":
         title = args.title or "🏗️ Azure Migration: auto-generated Bicep templates"
         desc = args.description or (
-            "## Azure Migration Architect — Automated MR\n\n"
+            "## PushToBicep Architect — Automated MR\n\n"
             "This Merge Request was created automatically by the "
-            "GitLab Duo **Azure Migration Architect** agent.\n\n"
+            "GitLab Duo **PushToBicep Architect** agent.\n\n"
             "Please review the generated `.bicep` files and the "
             "cost estimate before merging."
         )
