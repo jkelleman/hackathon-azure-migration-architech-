@@ -149,8 +149,8 @@ I didn't reach for Terraform CDK or Pulumi because the goal isn't to add another
 ### 1. Clone
 
 ```bash
-git clone https://gitlab.com/jkelleman/hackathon-azure-migration-architect.git
-cd hackathon-azure-migration-architect
+git clone https://gitlab.com/jkelleman/pushtobicep-architect.git
+cd pushtobicep-architect
 ```
 
 ### 2. Set CI/CD Variables
