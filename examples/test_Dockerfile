@@ -1,0 +1,44 @@
+# examples/test_Dockerfile
+# ─────────────────────────────────────────────────────────────
+# Node.js multi-stage build for the Contoso Orders API.
+# The agent should translate this to an ACR + Container Apps
+# or App Service deployment in the generated Bicep.
+# ─────────────────────────────────────────────────────────────
+
+# ── Build stage ──────────────────────────────────────────────
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm ci --production=false
+
+COPY tsconfig.json ./
+COPY src/ ./src/
+RUN npm run build
+
+# ── Production stage ─────────────────────────────────────────
+FROM node:20-alpine
+
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+
+WORKDIR /app
+
+# Only production deps
+COPY package*.json ./
+RUN npm ci --omit=dev && npm cache clean --force
+
+COPY --from=builder /app/dist ./dist
+
+# Health check (used by ALB + ECS)
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+  CMD wget -qO- http://localhost:3000/health || exit 1
+
+USER appuser
+
+EXPOSE 3000
+
+ENV NODE_ENV=production
+ENV PORT=3000
+
+CMD ["node", "dist/server.js"]

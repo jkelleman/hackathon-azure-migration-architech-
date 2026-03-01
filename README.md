@@ -200,6 +200,19 @@ git push origin main
 
 The pipeline runs. A Merge Request appears. That's it.
 
+### 4. Stress-Test with a Real-World Config
+
+The `examples/` folder includes a multi-tier AWS application (`test_multitier_app.tf` + `test_Dockerfile`) modelled after a typical enterprise workload: ECS Fargate, ALB, RDS PostgreSQL, ElastiCache Redis, S3, CloudWatch, and SNS — the kind of stack a platform team asks you to migrate on a Tuesday.
+
+```bash
+cp examples/test_multitier_app.tf main.tf
+cp examples/test_Dockerfile Dockerfile
+git add main.tf Dockerfile && git commit -s -m "feat: migrate contoso-orders to Azure"
+git push origin main
+```
+
+This exercises every mapping path in the prompt and generates a comprehensive Bicep template with Azure Container Apps, Azure Database for PostgreSQL, Blob Storage, Azure Cache for Redis, and Azure Monitor.
+
 ---
 
 ## Repo Structure
@@ -224,7 +237,9 @@ The pipeline runs. A Merge Request appears. That's it.
   ├── examples/
   │   ├── sample_main.tf ················ AWS Terraform (agent input)
   │   ├── sample_Dockerfile ············· Container config (agent input)
-  │   └── generated_main.bicep ·········· Azure Bicep (agent output)
+  │   ├── generated_main.bicep ·········· Azure Bicep (agent output)
+  │   ├── test_multitier_app.tf ········· Multi-tier AWS app (test input)
+  │   └── test_Dockerfile ··············· Node.js container (test input)
   │
   ├── LICENSE ··························· MIT
   └── README.md
