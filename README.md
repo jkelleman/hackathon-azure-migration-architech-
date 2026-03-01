@@ -138,6 +138,31 @@ I didn't reach for Terraform CDK or Pulumi because the goal isn't to add another
 
 ---
 
+## Reliability
+
+A hackathon project that crashes on its second run isn't a prototype — it's a demo. This agent is built to handle the real world:
+
+```
+ ╔══════════════════════════════════════════════════════════════════╗
+ ║                   WHAT DOESN'T BREAK IT                         ║
+ ╚══════════════════════════════════════════════════════════════════╝
+
+  Problem                          How it's handled
+  ──────────────────────────────   ──────────────────────────────────
+  Duo API returns 429 / 5xx       Exponential backoff, up to 3 retries
+  Network timeout                 120s for Duo, 30s for GitLab API
+  Branch already exists            409 → log + continue (idempotent)
+  Bicep file already on branch    Automatic fallback: create → update
+  First push (no prior SHA)       CI detects zero-SHA, diffs vs. main
+  Missing API token / project ID  Fail-fast with clear error message
+  Large .bicep with $ or backtick Read from file, not shell expansion
+  Multiple Bicep blocks in output All fenced blocks are concatenated
+```
+
+The goal: run the pipeline twice and get the same MR updated, not a stack trace.
+
+---
+
 ## Quick Start
 
 ### Prerequisites
@@ -185,11 +210,12 @@ The pipeline runs. A Merge Request appears. That's it.
  ╚══════════════════════════════════════════════════════════════════╝
 
   .
+  ├── .gitignore ·························· Ignore generated/ and build artifacts
+  ├── .gitlab-ci.yml ····················· CI pipeline: detect → generate → publish
   ├── agent-config.yml ·················· Duo Agent Platform config
-  ├── gitlab-ci.yml ····················· CI pipeline: detect → generate → publish
   │
   ├── prompts/
-  │   └── azure_migration_architect.md ·· The AI prompt (persona + constraints + format)
+  │   └── pushtobicep_architect.md ······ The AI prompt (persona + constraints + format)
   │
   ├── scripts/
   │   ├── invoke_duo_agent.py ··········· Calls GitLab Duo Chat API

@@ -31,11 +31,20 @@ detect_infra:
   image: alpine:3.19
   extends: .infra_changes
   script:
-    - echo "Detecting infrastructure file changes…"
+    - apk add --no-cache git
+    - echo "Detecting infrastructure file changes\u2026"
+    #
+    # CI_COMMIT_BEFORE_SHA is all zeros on the first push to a new
+    # branch.  Fall back to diffing against the default branch.
+    #
     - |
-      git diff --name-only $CI_COMMIT_BEFORE_SHA $CI_COMMIT_SHA \
+      BEFORE_SHA="$CI_COMMIT_BEFORE_SHA"
+      if [ "$BEFORE_SHA" = "0000000000000000000000000000000000000000" ] || [ -z "$BEFORE_SHA" ]; then
+        BEFORE_SHA="origin/$CI_DEFAULT_BRANCH"
+      fi
+      git diff --name-only "$BEFORE_SHA" "$CI_COMMIT_SHA" \
         | grep -E '\.(tf)$|Dockerfile' \
-        | tee /tmp/changed_infra_files.txt
+        | tee /tmp/changed_infra_files.txt || true
     - echo "CHANGED_FILES=$(cat /tmp/changed_infra_files.txt | tr '\n' ',')" >> detect.env
   artifacts:
     reports:
@@ -50,8 +59,8 @@ generate_bicep:
   script:
     - echo "Changed files ➜ $CHANGED_FILES"
     #
-    # Invoke the GitLab Duo Chat API with the Azure Migration
-    # Architect prompt template.  The script reads each changed
+    # Invoke the GitLab Duo Chat API with the PushToBicep Architect
+    # prompt template.  The script reads each changed
     # file, builds the prompt, calls Duo, and writes:
     #   generated/main.bicep           — the Azure Bicep template
     #   generated/migration_summary.md — tables for the MR body
@@ -77,13 +86,15 @@ publish_mr:
     - python scripts/open_migration_mr.py --action create-branch
     #
     # 2. Commit generated Bicep file(s)
+    #    Pass the file path instead of inlining content via $(cat)
+    #    to avoid shell expansion issues with large or special-char files.
     #
     - |
       for bicep in generated/*.bicep; do
         python scripts/open_migration_mr.py \
           --action commit \
           --file "infra/$(basename $bicep)" \
-          --content "$(cat $bicep)"
+          --content-file "$bicep"
       done
     #
     # 3. Open the Merge Request (use AI-generated summary if available)

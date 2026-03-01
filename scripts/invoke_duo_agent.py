@@ -25,6 +25,7 @@ import os
 import re
 import sys
 import textwrap
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -41,7 +42,7 @@ HEADERS = {
 }
 
 # Load the prompt template at import time so it can be interpolated
-PROMPT_TEMPLATE_PATH = Path(__file__).resolve().parent.parent / "prompts" / "azure_migration_architect.md"
+PROMPT_TEMPLATE_PATH = Path(__file__).resolve().parent.parent / "prompts" / "pushtobicep_architect.md"
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────
@@ -73,10 +74,11 @@ def _build_prompt(original_code: str) -> str:
     return prompt
 
 
-def _call_duo_chat(prompt: str) -> str:
+def _call_duo_chat(prompt: str, *, max_retries: int = 3) -> str:
     """
     Call the GitLab Duo Chat API (or Agent Platform API) and return the
-    AI-generated text response.
+    AI-generated text response.  Retries transient errors (429, 5xx)
+    with exponential backoff.
 
     Endpoint: POST /api/v4/chat/completions   (GitLab 17.x+)
     Docs: https://docs.gitlab.com/ee/api/duo_chat.html
@@ -88,33 +90,50 @@ def _call_duo_chat(prompt: str) -> str:
         "resource_id": PROJECT_ID,
     }).encode()
 
-    req = urllib.request.Request(url, data=body, headers=HEADERS, method="POST")
-
-    try:
-        with urllib.request.urlopen(req, timeout=120) as resp:
-            data = json.loads(resp.read().decode())
-            # The response shape may vary; handle common formats
-            if isinstance(data, dict):
-                return data.get("choices", [{}])[0].get("message", {}).get("content", "") \
-                    or data.get("response", "") \
-                    or data.get("content", "") \
-                    or json.dumps(data)
-            return str(data)
-    except urllib.error.HTTPError as exc:
-        detail = exc.read().decode() if exc.fp else ""
-        print(f"Duo Chat API {exc.code}: {detail}", file=sys.stderr)
-        sys.exit(1)
+    for attempt in range(1, max_retries + 1):
+        req = urllib.request.Request(url, data=body, headers=HEADERS, method="POST")
+        try:
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                data = json.loads(resp.read().decode())
+                # The response shape may vary; handle common formats
+                if isinstance(data, dict):
+                    return data.get("choices", [{}])[0].get("message", {}).get("content", "") \
+                        or data.get("response", "") \
+                        or data.get("content", "") \
+                        or json.dumps(data)
+                return str(data)
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode() if exc.fp else ""
+            retryable = exc.code in (429, 500, 502, 503, 504)
+            if retryable and attempt < max_retries:
+                wait = 2 ** attempt
+                print(f"Duo Chat API {exc.code} (attempt {attempt}/{max_retries}), retrying in {wait}s…", file=sys.stderr)
+                time.sleep(wait)
+                continue
+            print(f"Duo Chat API {exc.code}: {detail}", file=sys.stderr)
+            sys.exit(1)
+        except (urllib.error.URLError, TimeoutError) as exc:
+            if attempt < max_retries:
+                wait = 2 ** attempt
+                print(f"Network error (attempt {attempt}/{max_retries}): {exc}, retrying in {wait}s…", file=sys.stderr)
+                time.sleep(wait)
+                continue
+            print(f"Network error after {max_retries} attempts: {exc}", file=sys.stderr)
+            sys.exit(1)
+    # Unreachable, but satisfies type checkers
+    sys.exit(1)
 
 
 def _extract_bicep(response_text: str) -> str:
     """
-    Extract the Bicep code block from the AI response.
-    Looks for ```bicep ... ``` fenced blocks.
+    Extract Bicep code blocks from the AI response.
+    Concatenates all ```bicep ... ``` fenced blocks (the model may
+    split modules across multiple blocks).
     """
     pattern = r"```bicep\s*\n(.*?)```"
-    match = re.search(pattern, response_text, re.DOTALL)
-    if match:
-        return match.group(1).strip()
+    matches = re.findall(pattern, response_text, re.DOTALL)
+    if matches:
+        return "\n\n".join(m.strip() for m in matches)
     # Fallback: return everything after "## Generated Bicep Code"
     marker = "## Generated Bicep Code"
     idx = response_text.find(marker)
@@ -152,6 +171,15 @@ def main() -> None:
 
     outdir = Path(args.outdir)
     outdir.mkdir(parents=True, exist_ok=True)
+
+    # ── Validate required environment variables ─────────────────
+    if not PROJECT_ID or not API_TOKEN:
+        print(
+            "ERROR: CI_PROJECT_ID and GITLAB_API_TOKEN must be set.\n"
+            "Add them as CI/CD Variables in your GitLab project settings.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
     changed_files = [f.strip() for f in args.files.split(",") if f.strip()]
     if not changed_files:

@@ -21,7 +21,7 @@ trigger:
 
 # ── Prompt ─────────────────────────────────────────────────────────
 prompt:
-  template_file: prompts/azure_migration_architect.md
+  template_file: prompts/pushtobicep_architect.md
   variables:
     original_code: "{{changed_file_content}}"
     project_context: "{{project_metadata}}"
@@ -53,8 +53,8 @@ actions:
 
 # ── Environment Variables (stored in GitLab CI/CD Variables) ──────
 env:
-  GITLAB_TOKEN: "${GITLAB_API_TOKEN}"        # Project or Group access token
-  GITLAB_PROJECT_ID: "${CI_PROJECT_ID}"
+  GITLAB_API_TOKEN: "${GITLAB_API_TOKEN}"    # Project or Group access token
+  CI_PROJECT_ID: "${CI_PROJECT_ID}"
   AZURE_SUBSCRIPTION_ID: "${AZURE_SUBSCRIPTION_ID}"
   AZURE_TENANT_ID: "${AZURE_TENANT_ID}"
   AZURE_CLIENT_ID: "${AZURE_CLIENT_ID}"      # Service Principal
